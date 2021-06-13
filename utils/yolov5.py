@@ -1,54 +1,27 @@
-def init_detector(opts, device='cuda:0'):
-    config = mmcv.Config.fromfile(opts.config)
-    new_config = 'train_pipeline' in config or 'test_pipeline' in config
-    if new_config:
-        # simulate old config
-        if opts.in_scale is None:
-            print('Warning: using new config and fixing size_divisor to 32')
-            config.data.test.img_scale = config.test_pipeline[1]['img_scale']
-        else:
-            config.data.test.img_scale = 1
-        config.data.test.size_divisor = 32
-    if opts.in_scale is not None:
-        if 'ssd' in basename(opts.config):
-            # SSD
-            if opts.in_scale <= 0.2:
-                # too small leads to some issues
-                l = round(1920*opts.in_scale)
-                config.data.test.img_scale = (l, l)
-                config.data.test.resize_keep_ratio = False
-            else:
-                config.data.test.img_scale = opts.in_scale
-                config.data.test.resize_keep_ratio = True
-        else:
-            config.data.test.img_scale = opts.in_scale
-            config.data.test.resize_keep_ratio = True
-    if opts.no_mask:
-        if 'roi_head' in config.model and 'mask_head' in config.model['roi_head']:
-            config.model['roi_head']['mask_head'] = None
-    if 'zoom_crop' in opts and opts.zoom_crop:
-        config.data.test.zoom_crop = {
-            'h': opts.zoom_crop_h,
-            'y': opts.zoom_crop_y,
-        }
-    else:
-        config.data.test.zoom_crop = None
-    config.model.pretrained = None
-    if 'action_head' in config.model:
-        config.model['action_head_weights'] = opts.action_head_weights
+from yolov5.models.experimental import attempt_load
+from yolov5.utils.torch_utils import select_device
+from yolov5.utils.general import check_img_size, check_requirements, set_logging
 
-    model = build_detector(config.model, test_cfg=config.test_cfg)
-    map_loc = 'cpu' if device == 'cpu' else None
-    checkpoint = load_checkpoint(model, opts.weights, map_location=map_loc)
-    if 'CLASSES' in checkpoint['meta']:
-        model.CLASSES = checkpoint['meta']['CLASSES']
-    else:
-        warnings.simplefilter('once')
-        warnings.warn('Class names are not saved in the checkpoint\'s '
-                      'meta data, use COCO classes by default.')
-        model.CLASSES = get_classes('coco')
-    model.cfg = config
-    model.to(device)
+def init_detector(opts, device='cuda:0', imgsz = 1920, half = False):
+    check_requirements(exclude=('tensorboard', 'thop'))
+
+    weights = opts.weights 
+    
+    # Initialize
+    set_logging()
+    device = select_device(device)
+    half &= device.type != 'cpu'  # half precision only supported on CUDA
+
+
+    # Load model
+    model = attempt_load(weights, map_location=device)  # load FP32 model
+    stride = int(model.stride.max())  # model stride
+    imgsz = check_img_size(imgsz, s=stride)  # check image size
+    #names = model.module.names if hasattr(model, 'module') else model.names  # get class names
+    if half:
+        model.half()  # to FP16
+    
+    ##model.to(device)
     model.eval()
     return model
 
