@@ -183,7 +183,7 @@ def inference_detector(model, img, gpu_pre=True, numpy_res=True, decode_mask=Tru
 
 
 def parse_det_result(result, class_mapping=None, n_class=None, separate_scores=True, return_sel=False):
-        if len(result) > 2:
+    if len(result) > 2:
         bboxes_scores, labels, masks = result
     else:
         bboxes_scores, labels = result
